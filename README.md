@@ -18,15 +18,4 @@ Built as part of a smart city AI initiative, it demonstrates real-world applicat
 - Dynamic signal optimization decision-support module
 - Automated city planner reports with infrastructure recommendations
 
-  ## GITHUB TOPICS / TAGS
-
-  maching-learning
-  smart-cities
-  time-series
-  lstm
-  traffic-analysis
-  geospatial
-  python
-  data-visualization
-  urban-computing
-  arima clustering
+ 
