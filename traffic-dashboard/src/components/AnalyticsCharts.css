@@ -1,0 +1,39 @@
+.chart-container {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.chart-wrapper {
+  flex: 1;
+  width: 100%;
+}
+
+.live-indicator {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.live-indicator::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background-color: var(--danger);
+  border-radius: 50%;
+  display: inline-block;
+  animation: pulse 2s infinite;
+}

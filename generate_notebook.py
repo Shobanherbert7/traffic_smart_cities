@@ -1,0 +1,268 @@
+import json
+
+notebook = {
+    "cells": [
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["# Traffic Pattern Analysis for Smart Cities\n", "This notebook contains the data analysis and machine learning models required for predicting traffic volumes, identifying congestion hotspots, and forecasting travel times."]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "import pandas as pd\n",
+                "import numpy as np\n",
+                "import matplotlib.pyplot as plt\n",
+                "import seaborn as sns\n",
+                "from datetime import datetime, timedelta\n",
+                "import warnings\n",
+                "warnings.filterwarnings('ignore')\n",
+                "\n",
+                "# Set plot style\n",
+                "plt.style.use('seaborn-v0_8-whitegrid')\n",
+                "sns.set_palette('muted')"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["## 1. Mock Data Generation\n", "Since we don't have access to real IoT sensor data, we will generate a synthetic dataset mimicking real-time traffic data."]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "np.random.seed(42)\n",
+                "num_records = 5000\n",
+                "start_time = datetime.now() - timedelta(days=30)\n",
+                "\n",
+                "# Generate timestamps\n",
+                "timestamps = [start_time + timedelta(minutes=15 * i) for i in range(num_records)]\n",
+                "\n",
+                "# Generate locations (e.g., 5 major intersections)\n",
+                "locations = ['Intersection A', 'Intersection B', 'Highway 1 Exit', 'Downtown Hub', 'Suburban Route']\n",
+                "loc_data = np.random.choice(locations, num_records)\n",
+                "\n",
+                "# Generate weather (0: Clear, 1: Rain, 2: Snow)\n",
+                "weather = np.random.choice([0, 1, 2], num_records, p=[0.7, 0.2, 0.1])\n",
+                "\n",
+                "# Generate base traffic volumes and speeds (incorporating daily patterns)\n",
+                "volumes = []\n",
+                "speeds = []\n",
+                "for i, ts in enumerate(timestamps):\n",
+                "    hour = ts.hour\n",
+                "    # Peak hours: 7-9 AM, 5-7 PM\n",
+                "    if (7 <= hour <= 9) or (17 <= hour <= 19):\n",
+                "        base_vol = np.random.normal(500, 50)\n",
+                "        base_speed = np.random.normal(20, 5) # Lower speed during peak\n",
+                "    else:\n",
+                "        base_vol = np.random.normal(200, 30)\n",
+                "        base_speed = np.random.normal(45, 10)\n",
+                "    \n",
+                "    # Weather impact\n",
+                "    if weather[i] == 1: # Rain\n",
+                "        base_vol *= 0.9\n",
+                "        base_speed *= 0.8\n",
+                "    elif weather[i] == 2: # Snow\n",
+                "        base_vol *= 0.7\n",
+                "        base_speed *= 0.6\n",
+                "        \n",
+                "    volumes.append(max(0, int(base_vol)))\n",
+                "    speeds.append(max(0, base_speed))\n",
+                "\n",
+                "# Create DataFrame\n",
+                "df = pd.DataFrame({\n",
+                "    'timestamp': timestamps,\n",
+                "    'location': loc_data,\n",
+                "    'volume': volumes,\n",
+                "    'speed_kmh': speeds,\n",
+                "    'weather_condition': weather\n",
+                "})\n",
+                "\n",
+                "df.head()"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["## 2. Congestion Hotspot Identification (Clustering)\n", "We use K-Means clustering to categorize traffic states into different congestion levels (e.g., Low, Medium, High)."]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "from sklearn.cluster import KMeans\n",
+                "from sklearn.preprocessing import StandardScaler\n",
+                "\n",
+                "# We'll cluster based on volume and speed\n",
+                "X_cluster = df[['volume', 'speed_kmh']]\n",
+                "scaler = StandardScaler()\n",
+                "X_scaled = scaler.fit_transform(X_cluster)\n",
+                "\n",
+                "# Apply K-Means\n",
+                "kmeans = KMeans(n_clusters=3, random_state=42)\n",
+                "df['congestion_cluster'] = kmeans.fit_predict(X_scaled)\n",
+                "\n",
+                "plt.figure(figsize=(10, 6))\n",
+                "sns.scatterplot(data=df, x='volume', y='speed_kmh', hue='congestion_cluster', palette='viridis', alpha=0.6)\n",
+                "plt.title('Traffic Congestion Clusters')\n",
+                "plt.xlabel('Traffic Volume')\n",
+                "plt.ylabel('Average Speed (km/h)')\n",
+                "plt.show()\n"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["## 3. Time Series Forecasting (ARIMA)\n", "We will use an ARIMA model to predict future traffic volumes for a specific location."]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "from statsmodels.tsa.arima.model import ARIMA\n",
+                "from sklearn.metrics import mean_squared_error\n",
+                "\n",
+                "# Filter data for one specific intersection and aggregate by hour\n",
+                "ts_df = df[df['location'] == 'Downtown Hub'].copy()\n",
+                "ts_df.set_index('timestamp', inplace=True)\n",
+                "hourly_vol = ts_df['volume'].resample('h').mean().ffill()\n",
+                "\n",
+                "# Train-test split (80/20)\n",
+                "train_size = int(len(hourly_vol) * 0.8)\n",
+                "train, test = hourly_vol[:train_size], hourly_vol[train_size:]\n",
+                "\n",
+                "# Fit ARIMA model (Parameters p,d,q would normally be tuned via grid search)\n",
+                "model = ARIMA(train, order=(2, 1, 2))\n",
+                "model_fit = model.fit()\n",
+                "\n",
+                "# Predict\n",
+                "predictions = model_fit.forecast(steps=len(test))\n",
+                "\n",
+                "plt.figure(figsize=(12, 5))\n",
+                "plt.plot(train.index[-100:], train.values[-100:], label='Train')\n",
+                "plt.plot(test.index, test.values, label='Actual Test')\n",
+                "plt.plot(test.index, predictions, color='red', label='ARIMA Predictions')\n",
+                "plt.title('ARIMA Traffic Volume Forecast')\n",
+                "plt.legend()\n",
+                "plt.show()"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["## 4. Congestion Prediction (Random Forest)\n", "We build a predictive model to classify the expected congestion cluster based on time of day, location, and weather."]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "from sklearn.ensemble import RandomForestClassifier\n",
+                "from sklearn.model_selection import train_test_split\n",
+                "from sklearn.metrics import classification_report\n",
+                "\n",
+                "# Prepare features\n",
+                "df['hour'] = df['timestamp'].dt.hour\n",
+                "df['day_of_week'] = df['timestamp'].dt.dayofweek\n",
+                "\n",
+                "features = ['hour', 'day_of_week', 'weather_condition']\n",
+                "X = df[features]\n",
+                "y = df['congestion_cluster']\n",
+                "\n",
+                "X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)\n",
+                "\n",
+                "rf_model = RandomForestClassifier(n_estimators=100, random_state=42)\n",
+                "rf_model.fit(X_train, y_train)\n",
+                "\n",
+                "y_pred = rf_model.predict(X_test)\n",
+                "print(classification_report(y_test, y_pred))"
+            ]
+        },
+        {
+            "cell_type": "markdown",
+            "metadata": {},
+            "source": ["## 5. Sequence Prediction (LSTM)\n", "Using Long Short-Term Memory (LSTM) networks to predict sequence patterns for traffic speed."]
+        },
+        {
+            "cell_type": "code",
+            "execution_count": None,
+            "metadata": {},
+            "outputs": [],
+            "source": [
+                "# Note: Make sure tensorflow/keras is installed\n",
+                "from tensorflow.keras.models import Sequential\n",
+                "from tensorflow.keras.layers import LSTM, Dense, Dropout\n",
+                "from sklearn.preprocessing import MinMaxScaler\n",
+                "\n",
+                "scaler_lstm = MinMaxScaler(feature_range=(0, 1))\n",
+                "scaled_speed = scaler_lstm.fit_transform(hourly_vol.values.reshape(-1, 1))\n",
+                "\n",
+                "def create_dataset(dataset, look_back=12):\n",
+                "    X, Y = [], []\n",
+                "    for i in range(len(dataset)-look_back-1):\n",
+                "        a = dataset[i:(i+look_back), 0]\n",
+                "        X.append(a)\n",
+                "        Y.append(dataset[i + look_back, 0])\n",
+                "    return np.array(X), np.array(Y)\n",
+                "\n",
+                "look_back = 12 # Look back 12 hours\n",
+                "X_lstm, Y_lstm = create_dataset(scaled_speed, look_back)\n",
+                "X_lstm = np.reshape(X_lstm, (X_lstm.shape[0], X_lstm.shape[1], 1))\n",
+                "\n",
+                "train_size_lstm = int(len(X_lstm) * 0.8)\n",
+                "X_train_lstm, X_test_lstm = X_lstm[0:train_size_lstm], X_lstm[train_size_lstm:]\n",
+                "Y_train_lstm, Y_test_lstm = Y_lstm[0:train_size_lstm], Y_lstm[train_size_lstm:]\n",
+                "\n",
+                "model_lstm = Sequential()\n",
+                "model_lstm.add(LSTM(50, return_sequences=True, input_shape=(look_back, 1)))\n",
+                "model_lstm.add(LSTM(50))\n",
+                "model_lstm.add(Dense(1))\n",
+                "model_lstm.compile(loss='mean_squared_error', optimizer='adam')\n",
+                "\n",
+                "# Train model (uncomment to train, using epochs=10 for speed)\n",
+                "print(\"Training LSTM model...\")\n",
+                "model_lstm.fit(X_train_lstm, Y_train_lstm, epochs=5, batch_size=32, verbose=0)\n",
+                "print(\"LSTM Model Training Complete.\")\n",
+                "\n",
+                "lstm_predictions = model_lstm.predict(X_test_lstm)\n",
+                "lstm_predictions = scaler_lstm.inverse_transform(lstm_predictions)\n",
+                "actual_values = scaler_lstm.inverse_transform(Y_test_lstm.reshape(-1, 1))\n",
+                "\n",
+                "plt.figure(figsize=(10,5))\n",
+                "plt.plot(actual_values[:100], label='Actual Speed')\n",
+                "plt.plot(lstm_predictions[:100], color='red', label='LSTM Predicted')\n",
+                "plt.title('LSTM Traffic Speed Prediction')\n",
+                "plt.legend()\n",
+                "plt.show()"
+            ]
+        }
+    ],
+    "metadata": {
+        "kernelspec": {
+            "display_name": "Python 3",
+            "language": "python",
+            "name": "python3"
+        },
+        "language_info": {
+            "name": "python",
+            "version": "3.8"
+        }
+    },
+    "nbformat": 4,
+    "nbformat_minor": 4
+}
+
+with open('traffic_analysis.ipynb', 'w') as f:
+    json.dump(notebook, f, indent=1)
+print("Notebook created successfully!")
